@@ -71,12 +71,60 @@ def assert_web_server_empty_dataset() -> None:
             with urllib.request.urlopen(url + "/api/export", timeout=5) as res:
                 exported = json.loads(res.read().decode("utf-8"))
             assert exported["videos"] == []
+            import_payload = post_multipart(
+                url + "/api/import",
+                fields={"scene_type": "fixed_halfcourt"},
+                files={"files": ("sample.mp4", b"fake mp4 bytes")},
+            )
+            assert import_payload["ok"] is True
+            assert import_payload["saved"][0]["video_id"] == "fixed_halfcourt/sample.mp4"
+            assert (videos / "sample.mp4").exists()
         finally:
             proc.terminate()
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+
+def post_multipart(url: str, fields: dict[str, str], files: dict[str, tuple[str, bytes]]) -> dict:
+    boundary = "----basketball-shot-labeler-smoke"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                value.encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    for name, (filename, data) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    f'Content-Disposition: form-data; name="{name}"; '
+                    f'filename="{filename}"\r\n'
+                ).encode("utf-8"),
+                b"Content-Type: video/mp4\r\n\r\n",
+                data,
+                b"\r\n",
+            ]
+        )
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    body = b"".join(chunks)
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(body)),
+        },
+    )
+    with urllib.request.urlopen(request, timeout=5) as res:
+        return json.loads(res.read().decode("utf-8"))
 
 
 def wait_for_url(proc: subprocess.Popen[str]) -> str:

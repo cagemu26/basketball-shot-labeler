@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+from email.parser import BytesParser
+from email.policy import default as email_policy
 import json
 import mimetypes
 import os
+import re
 import threading
 import webbrowser
 from http import HTTPStatus
@@ -28,6 +31,13 @@ from shot_labeler import (
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "web"
+DEFAULT_SCENE_TYPES = (
+    "fixed_halfcourt",
+    "handheld_landscape",
+    "vertical_close",
+    "far_fullcourt",
+)
+SCENE_TYPE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,18 +98,27 @@ class LabelerState:
         self.scene_type_override = scene_type
         self.recursive = recursive
         self.lock = threading.Lock()
+        self.extra_video_paths: set[Path] = set()
         self.videos = self.discover_videos()
 
     def discover_videos(self) -> list[dict[str, Any]]:
         if not self.video_root.exists():
             self.video_root.mkdir(parents=True, exist_ok=True)
         iterator = self.video_root.rglob("*") if self.recursive else self.video_root.iterdir()
+        video_paths = {
+            item.resolve()
+            for item in iterator
+            if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS
+        }
+        video_paths.update(
+            path.resolve()
+            for path in self.extra_video_paths
+            if path.exists() and path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+        )
         videos: list[dict[str, Any]] = []
         for index, path in enumerate(
             sorted(
-                item.resolve()
-                for item in iterator
-                if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS
+                video_paths
             )
         ):
             videos.append(
@@ -113,6 +132,29 @@ class LabelerState:
                 }
             )
         return videos
+
+    def default_import_scene(self) -> str:
+        if self.scene_type_override:
+            return self.scene_type_override
+        try:
+            relative = self.video_root.resolve().relative_to(self.test_root.resolve())
+            if relative.parts:
+                return relative.parts[0]
+        except ValueError:
+            pass
+        return DEFAULT_SCENE_TYPES[0]
+
+    def scene_options(self) -> dict[str, Any]:
+        scenes = set(DEFAULT_SCENE_TYPES)
+        if self.scene_type_override:
+            scenes.add(self.scene_type_override)
+        if self.test_root.exists():
+            scenes.update(path.name for path in self.test_root.iterdir() if path.is_dir())
+        default_scene = normalize_scene_type(self.default_import_scene())
+        scenes.add(default_scene)
+        ordered = [scene for scene in DEFAULT_SCENE_TYPES if scene in scenes]
+        ordered.extend(sorted(scenes.difference(ordered)))
+        return {"default_scene_type": default_scene, "scene_types": ordered}
 
     def labels(self) -> dict[str, Any]:
         with self.lock:
@@ -143,6 +185,37 @@ class LabelerState:
         if index < 0 or index >= len(self.videos):
             return None
         return self.videos[index]
+
+    def import_videos(self, uploads: list[dict[str, Any]], scene_type: str | None) -> list[dict[str, Any]]:
+        scene = normalize_scene_type(scene_type or self.default_import_scene())
+        target_dir = (self.test_root / scene).resolve()
+        try:
+            target_dir.relative_to(self.test_root.resolve())
+        except ValueError as exc:
+            raise ValueError(f"invalid import directory: {target_dir}") from exc
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        saved: list[dict[str, Any]] = []
+        for upload in uploads:
+            filename = sanitize_video_filename(str(upload.get("filename") or ""))
+            data = upload.get("data")
+            if not isinstance(data, bytes) or not data:
+                raise ValueError(f"empty upload: {filename}")
+            destination = unique_destination(target_dir, filename)
+            destination.write_bytes(data)
+            self.extra_video_paths.add(destination.resolve())
+            saved.append(
+                {
+                    "filename": destination.name,
+                    "video_id": video_id_for(destination, self.test_root),
+                    "scene_type": scene,
+                    "size_bytes": destination.stat().st_size,
+                }
+            )
+        if not saved:
+            raise ValueError("no video files were uploaded")
+        self.videos = self.discover_videos()
+        return saved
 
 
 def find_or_create_label(labels: dict[str, Any], video_id: str, video_path: Path) -> dict[str, Any]:
@@ -209,6 +282,8 @@ def build_handler(state: LabelerState) -> type[BaseHTTPRequestHandler]:
             parsed = urlparse(self.path)
             if parsed.path == "/api/label":
                 return self.save_label()
+            if parsed.path == "/api/import":
+                return self.import_videos()
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def send_static(self, relative: str) -> None:
@@ -255,6 +330,14 @@ def build_handler(state: LabelerState) -> type[BaseHTTPRequestHandler]:
                 return self.send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             self.send_json({"ok": True, "label": item})
 
+        def import_videos(self) -> None:
+            try:
+                fields, uploads = parse_multipart_upload(self)
+                saved = state.import_videos(uploads, fields.get("scene_type"))
+            except Exception as exc:  # noqa: BLE001 - local tool returns message to UI.
+                return self.send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self.send_json({"ok": True, "saved": saved, "payload": videos_payload(state)})
+
         def send_export(self) -> None:
             data = json.dumps(state.labels(), ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(HTTPStatus.OK)
@@ -280,6 +363,65 @@ def build_handler(state: LabelerState) -> type[BaseHTTPRequestHandler]:
             super().log_message(format, *args)
 
     return LabelerHandler
+
+
+def normalize_scene_type(raw: str) -> str:
+    value = str(raw or "").strip()
+    if not SCENE_TYPE_PATTERN.fullmatch(value):
+        raise ValueError("scene_type must use letters, numbers, underscore, or dash")
+    return value
+
+
+def sanitize_video_filename(raw: str) -> str:
+    name = raw.replace("\\", "/").split("/")[-1].strip()
+    suffix = Path(name).suffix.lower()
+    if suffix not in VIDEO_EXTENSIONS:
+        raise ValueError(f"unsupported video file type: {suffix or '(none)'}")
+    stem = Path(name).stem
+    safe_stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", stem).strip(" ._") or "video"
+    return f"{safe_stem}{suffix}"
+
+
+def unique_destination(directory: Path, filename: str) -> Path:
+    candidate = directory / filename
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = candidate.suffix
+    for index in range(1, 10000):
+        candidate = directory / f"{stem}_{index}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise ValueError(f"could not find a free filename for {filename}")
+
+
+def parse_multipart_upload(handler: BaseHTTPRequestHandler) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    content_type = handler.headers.get("Content-Type", "")
+    if "multipart/form-data" not in content_type:
+        raise ValueError("request must be multipart/form-data")
+    content_length = int(handler.headers.get("Content-Length", "0") or "0")
+    if content_length <= 0:
+        raise ValueError("empty upload request")
+    body = handler.rfile.read(content_length)
+    header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+    message = BytesParser(policy=email_policy).parsebytes(header + body)
+    if not message.is_multipart():
+        raise ValueError("invalid multipart upload")
+
+    fields: dict[str, str] = {}
+    uploads: list[dict[str, Any]] = []
+    for part in message.iter_parts():
+        field_name = part.get_param("name", header="content-disposition")
+        if not field_name:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True) or b""
+        if filename:
+            uploads.append({"filename": filename, "data": payload})
+        else:
+            charset = part.get_content_charset() or "utf-8"
+            fields[str(field_name)] = payload.decode(charset, errors="replace")
+    return fields, uploads
 
 
 def videos_payload(state: LabelerState) -> dict[str, Any]:
@@ -312,6 +454,7 @@ def videos_payload(state: LabelerState) -> dict[str, Any]:
         "labels_path": str(state.labels_path),
         "test_root": str(state.test_root),
         "video_root": str(state.video_root),
+        "import": state.scene_options(),
         "videos": videos,
     }
 
@@ -365,7 +508,10 @@ def send_file_with_range(handler: BaseHTTPRequestHandler, path: Path) -> None:
             chunk = f.read(min(1024 * 1024, remaining))
             if not chunk:
                 break
-            handler.wfile.write(chunk)
+            try:
+                handler.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                break
             remaining -= len(chunk)
 
 

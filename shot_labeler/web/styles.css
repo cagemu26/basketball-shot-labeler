@@ -27,7 +27,8 @@ body {
 
 button,
 select,
-textarea {
+textarea,
+input[type="file"] {
   font: inherit;
 }
 
@@ -77,6 +78,11 @@ button.export {
   font-weight: 700;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -124,6 +130,13 @@ button.export {
   border-bottom: 1px solid var(--line);
 }
 
+.import-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
 .summary-strip span,
 .metrics span,
 .status-line,
@@ -133,6 +146,8 @@ button.export {
 }
 
 .video-list {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 8px;
 }
@@ -335,13 +350,19 @@ label {
 }
 
 select,
-textarea {
+textarea,
+input[type="file"] {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel-2);
   color: var(--text);
   padding: 9px 10px;
+}
+
+input[type="file"] {
+  min-width: 0;
+  font-size: 12px;
 }
 
 textarea {
@@ -381,7 +402,7 @@ textarea {
   }
 
   .video-list-panel {
-    max-height: 260px;
+    max-height: 560px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }

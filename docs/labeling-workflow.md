@@ -15,6 +15,19 @@ Example:
 {"time_s": 6.2, "result": "miss"}
 ```
 
+## Browser Workflow
+
+The full collection loop can be done in the web UI:
+
+1. Select the scene folder.
+2. Import local video files.
+3. Open an imported video from the left list.
+4. Mark each shot result.
+5. Save the video label.
+6. Export `labels.json`.
+
+Imported files are copied into `test_videos/<scene_type>/`.
+
 ## Optional Release Time
 
 If the release moment is visible, mark it too:

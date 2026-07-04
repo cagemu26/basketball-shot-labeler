@@ -18,6 +18,22 @@
           <span id="videoCount">0 videos</span>
           <span id="labeledCount">0 labeled</span>
         </div>
+        <form id="importForm" class="import-box">
+          <label>
+            Scene
+            <select id="importScene"></select>
+          </label>
+          <label>
+            Videos
+            <input
+              id="importFiles"
+              type="file"
+              accept="video/*,.mp4,.mov,.m4v,.avi,.mkv"
+              multiple
+            />
+          </label>
+          <button id="importButton" class="primary" type="submit">Import Videos</button>
+        </form>
         <div id="videoList" class="video-list"></div>
       </aside>
 

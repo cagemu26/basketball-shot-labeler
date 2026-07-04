@@ -22,6 +22,10 @@ const els = {
   pendingRelease: document.getElementById("pendingRelease"),
   notes: document.getElementById("notesInput"),
   exportButton: document.getElementById("exportButton"),
+  importForm: document.getElementById("importForm"),
+  importFiles: document.getElementById("importFiles"),
+  importScene: document.getElementById("importScene"),
+  importButton: document.getElementById("importButton"),
 };
 
 const MISS_TYPES = [
@@ -31,6 +35,13 @@ const MISS_TYPES = [
   "airball",
   "blocked",
   "under_basket_interference",
+];
+
+const DEFAULT_SCENE_TYPES = [
+  "fixed_halfcourt",
+  "handheld_landscape",
+  "vertical_close",
+  "far_fullcourt",
 ];
 
 function fmt(value) {
@@ -45,14 +56,33 @@ function currentVideo() {
 async function loadVideos() {
   const res = await fetch("/api/videos");
   const data = await res.json();
-  state.videos = data.videos || [];
-  els.datasetPath.textContent = data.labels_path || "";
+  applyVideosPayload(data);
   renderVideoList();
   if (state.videos.length > 0) {
     loadVideo(0);
   } else {
     setStatus("No videos found in video root.");
   }
+}
+
+function applyVideosPayload(data) {
+  state.videos = data.videos || [];
+  els.datasetPath.textContent = data.labels_path || "";
+  renderImportScenes(data.import || {});
+}
+
+function renderImportScenes(importInfo) {
+  const previous = els.importScene.value;
+  const sceneTypes = importInfo.scene_types?.length ? importInfo.scene_types : DEFAULT_SCENE_TYPES;
+  const defaultScene = importInfo.default_scene_type || sceneTypes[0] || "fixed_halfcourt";
+  els.importScene.innerHTML = "";
+  sceneTypes.forEach((sceneType) => {
+    const option = document.createElement("option");
+    option.value = sceneType;
+    option.textContent = sceneType;
+    els.importScene.appendChild(option);
+  });
+  els.importScene.value = sceneTypes.includes(previous) ? previous : defaultScene;
 }
 
 function renderVideoList() {
@@ -258,6 +288,51 @@ async function exportJson() {
   setStatus("Exported labels.json.");
 }
 
+async function importVideos(event) {
+  event.preventDefault();
+  const files = Array.from(els.importFiles.files || []);
+  if (files.length === 0) {
+    setStatus("Choose at least one video file.");
+    return;
+  }
+
+  els.importButton.disabled = true;
+  setStatus(`Importing ${files.length} video(s)...`);
+  try {
+    if (currentVideo()) {
+      const saved = await saveLabels(false);
+      if (!saved) return;
+    }
+    const body = new FormData();
+    body.append("scene_type", els.importScene.value);
+    files.forEach((file) => body.append("files", file, file.name));
+    const res = await fetch("/api/import", {
+      method: "POST",
+      body,
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setStatus(data.error || "Import failed.");
+      return;
+    }
+    applyVideosPayload(data.payload || {});
+    const firstImportedId = data.saved?.[0]?.video_id;
+    const targetIndex = state.videos.findIndex((video) => video.video_id === firstImportedId);
+    renderVideoList();
+    if (targetIndex >= 0) {
+      loadVideo(targetIndex);
+    } else if (state.videos.length > 0) {
+      loadVideo(Math.min(state.currentIndex, state.videos.length - 1));
+    }
+    els.importFiles.value = "";
+    setStatus(`Imported ${data.saved?.length || files.length} video(s).`);
+  } catch (error) {
+    setStatus(error.message || String(error));
+  } finally {
+    els.importButton.disabled = false;
+  }
+}
+
 function seekBy(seconds) {
   els.video.currentTime = Math.max(0, Math.min((els.video.duration || Infinity), els.video.currentTime + seconds));
 }
@@ -300,6 +375,7 @@ function bindControls() {
   document.getElementById("saveButton").addEventListener("click", () => saveLabels(false));
   document.getElementById("saveNextButton").addEventListener("click", () => saveLabels(true));
   els.exportButton.addEventListener("click", exportJson);
+  els.importForm.addEventListener("submit", importVideos);
 
   document.addEventListener("keydown", (event) => {
     const active = document.activeElement;
