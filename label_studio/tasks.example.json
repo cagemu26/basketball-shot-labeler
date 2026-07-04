@@ -1,0 +1,18 @@
+[
+  {
+    "data": {
+      "video": "http://localhost:9000/fixed_halfcourt/001.mp4",
+      "video_id": "fixed_halfcourt/001.mp4",
+      "scene_type": "fixed_halfcourt",
+      "fps": 30
+    }
+  },
+  {
+    "data": {
+      "video": "http://localhost:9000/fixed_halfcourt/002.mp4",
+      "video_id": "fixed_halfcourt/002.mp4",
+      "scene_type": "fixed_halfcourt",
+      "fps": 30
+    }
+  }
+]

@@ -144,6 +144,20 @@ The UI runs locally and writes directly to `labels.json`.
 9. Press `Save` or `Save Next`.
 10. Press `Export JSON` to save the current video and download the full `labels.json`.
 
+## Label Studio Workflow
+
+This repository also includes an optional Label Studio setup for multi-annotator
+or review-heavy workflows:
+
+- Workflow guide: `docs/label-studio-workflow.md`
+- Labeling config: `label_studio/shot_event_config.xml`
+- Import task example: `label_studio/tasks.example.json`
+- Export converter: `scripts/label_studio_export_to_labels.py`
+
+Use the built-in web labeler for the fastest direct `labels.json` workflow. Use
+Label Studio when you need reviewer queues, multiple annotators, or project
+management around the same shot-event labels.
+
 Keyboard shortcuts:
 
 - `space`: play or pause

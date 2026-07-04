@@ -21,6 +21,7 @@ import shot_labeler  # noqa: E402
 def main() -> int:
     assert_normalization()
     assert_web_server_empty_dataset()
+    assert_label_studio_converter()
     print("smoke test ok")
     return 0
 
@@ -136,6 +137,33 @@ def wait_for_url(proc: subprocess.Popen[str]) -> str:
         if proc.poll() is not None:
             break
     raise RuntimeError("web server did not start")
+
+
+def assert_label_studio_converter() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        output = Path(td) / "labels.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "label_studio_export_to_labels.py"),
+                "--input",
+                str(ROOT / "examples" / "label_studio_export.example.json"),
+                "--output",
+                str(output),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        labels = json.loads(output.read_text(encoding="utf-8"))
+        video = labels["videos"][0]
+        assert video["video_id"] == "fixed_halfcourt/001.mp4"
+        assert video["true_shots"] == 2
+        assert video["true_makes"] == 1
+        assert video["true_misses"] == 1
+        assert video["shots"][0]["release_time_s"] == 2.96
+        assert video["shots"][1]["miss_type"] == "airball"
 
 
 if __name__ == "__main__":

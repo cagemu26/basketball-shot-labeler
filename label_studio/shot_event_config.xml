@@ -1,0 +1,27 @@
+<View>
+  <Header value="Basketball shot-event labeling"/>
+  <Video name="video" value="$video" frameRate="$fps" timelineHeight="160" height="560"/>
+
+  <Header value="Shot result timeline labels"/>
+  <TimelineLabels name="shot_events" toName="video">
+    <Label value="make" background="#2ECC71"/>
+    <Label value="miss_rim_hit" background="#E74C3C"/>
+    <Label value="miss_backboard" background="#F39C12"/>
+    <Label value="miss_airball" background="#9B59B6"/>
+    <Label value="miss_blocked" background="#E67E22"/>
+    <Label value="miss_under_basket_interference" background="#C0392B"/>
+    <Label value="miss_unknown" background="#7F8C8D"/>
+    <Label value="release" background="#3498DB"/>
+  </TimelineLabels>
+
+  <Header value="Scene type"/>
+  <Choices name="scene_type" toName="video" choice="single-radio" required="true">
+    <Choice value="fixed_halfcourt"/>
+    <Choice value="handheld_landscape"/>
+    <Choice value="vertical_close"/>
+    <Choice value="far_fullcourt"/>
+  </Choices>
+
+  <Header value="Notes"/>
+  <TextArea name="notes" toName="video" placeholder="Optional review notes." editable="true"/>
+</View>

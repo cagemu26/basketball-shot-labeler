@@ -1,0 +1,61 @@
+[
+  {
+    "id": 1,
+    "data": {
+      "video": "http://localhost:9000/fixed_halfcourt/001.mp4",
+      "video_id": "fixed_halfcourt/001.mp4",
+      "scene_type": "fixed_halfcourt",
+      "fps": 30
+    },
+    "annotations": [
+      {
+        "id": 11,
+        "result": [
+          {
+            "from_name": "scene_type",
+            "to_name": "video",
+            "type": "choices",
+            "value": {
+              "choices": ["fixed_halfcourt"]
+            }
+          },
+          {
+            "from_name": "shot_events",
+            "to_name": "video",
+            "type": "timelinelabels",
+            "value": {
+              "ranges": [{"start": 2.96, "end": 2.99}],
+              "timelinelabels": ["release"]
+            }
+          },
+          {
+            "from_name": "shot_events",
+            "to_name": "video",
+            "type": "timelinelabels",
+            "value": {
+              "ranges": [{"start": 3.42, "end": 3.45}],
+              "timelinelabels": ["make"]
+            }
+          },
+          {
+            "from_name": "shot_events",
+            "to_name": "video",
+            "type": "timelinelabels",
+            "value": {
+              "ranges": [{"start": 6.2, "end": 6.23}],
+              "timelinelabels": ["miss_airball"]
+            }
+          },
+          {
+            "from_name": "notes",
+            "to_name": "video",
+            "type": "textarea",
+            "value": {
+              "text": ["Example export."]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
