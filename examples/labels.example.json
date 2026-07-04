@@ -1,0 +1,40 @@
+{
+  "name": "basketball-shot-labels",
+  "defaults": {
+    "has_net": true,
+    "timeout_seconds": 900,
+    "tolerance": {
+      "makes": 0,
+      "misses": 0,
+      "attempts": 0,
+      "shot_time_s": 0.35
+    }
+  },
+  "videos": [
+    {
+      "video_id": "fixed_halfcourt/001.mp4",
+      "scene_type": "fixed_halfcourt",
+      "true_shots": 2,
+      "true_makes": 1,
+      "true_misses": 1,
+      "score_time": [3.42],
+      "shots": [
+        {
+          "attempt": 1,
+          "time_s": 3.42,
+          "result": "make",
+          "result_time_s": 3.42,
+          "release_time_s": 2.96
+        },
+        {
+          "attempt": 2,
+          "time_s": 6.2,
+          "result": "miss",
+          "result_time_s": 6.2,
+          "miss_type": "airball"
+        }
+      ],
+      "notes": "Example only."
+    }
+  ]
+}

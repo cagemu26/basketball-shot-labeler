@@ -1,0 +1,18 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local datasets and generated labels should not be committed by default.
+labels.json
+test_videos/
+test-videos/
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.m4v
+*.avi
+*.mkv

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Basketball Shot Labeler</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="video-list-panel">
+        <div class="panel-head">
+          <h1>Shot Labeler</h1>
+          <p id="datasetPath"></p>
+        </div>
+        <div class="summary-strip">
+          <span id="videoCount">0 videos</span>
+          <span id="labeledCount">0 labeled</span>
+        </div>
+        <div id="videoList" class="video-list"></div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h2 id="currentTitle">No video selected</h2>
+            <p id="currentMeta"></p>
+          </div>
+          <div class="status-line" id="statusLine">Ready</div>
+        </header>
+
+        <div class="media-stage">
+          <video id="videoPlayer" controls playsinline></video>
+        </div>
+
+        <div class="control-bar">
+          <button id="back5Button" title="Jump back 5 seconds">-5s</button>
+          <button id="back1Button" title="Jump back 1 second">-1s</button>
+          <button id="prevFrameButton" title="Previous frame">Frame -</button>
+          <button id="releaseButton" class="secondary" title="Mark release time">Release</button>
+          <button id="makeButton" class="make" title="Add made shot">Make</button>
+          <button id="missButton" class="miss" title="Add missed shot">Miss</button>
+          <button id="nextFrameButton" title="Next frame">Frame +</button>
+          <button id="forward1Button" title="Jump forward 1 second">+1s</button>
+          <button id="forward5Button" title="Jump forward 5 seconds">+5s</button>
+        </div>
+
+        <section class="annotation-grid">
+          <div class="shot-table-wrap">
+            <div class="section-head">
+              <h3>Shots</h3>
+              <div class="metrics">
+                <span id="shotTotal">0 shots</span>
+                <span id="makeTotal">0 make</span>
+                <span id="missTotal">0 miss</span>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Result</th>
+                  <th>Result Time</th>
+                  <th>Release</th>
+                  <th>Type</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="shotRows"></tbody>
+            </table>
+          </div>
+
+          <div class="side-panel">
+            <div class="pending-box">
+              <span>Pending release</span>
+              <strong id="pendingRelease">-</strong>
+            </div>
+            <label>
+              Notes
+              <textarea id="notesInput" rows="8"></textarea>
+            </label>
+            <div class="save-row">
+              <button id="undoButton" title="Undo last shot">Undo</button>
+              <button id="clearReleaseButton" title="Clear release marker">Clear Release</button>
+              <button id="saveButton" class="primary" title="Save labels">Save</button>
+              <button id="saveNextButton" class="primary" title="Save and load next video">Save Next</button>
+            </div>
+            <div class="export-row">
+              <button id="exportButton" class="export" title="Save current video and export labels.json">
+                Export JSON
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
