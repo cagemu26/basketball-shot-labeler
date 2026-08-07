@@ -38,6 +38,11 @@ DEFAULT_SCENE_TYPES = (
     "far_fullcourt",
 )
 SCENE_TYPE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+MAX_IMPORT_BYTES = 64 * 1024 * 1024
+
+
+class UploadTooLargeError(ValueError):
+    """Raised before a browser upload is read into process memory."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,7 +100,7 @@ class LabelerState:
         self.labels_path = labels_path
         self.test_root = test_root
         self.video_root = video_root
-        self.scene_type_override = scene_type
+        self.scene_type_override = normalize_scene_type(scene_type) if scene_type else None
         self.recursive = recursive
         self.lock = threading.Lock()
         self.extra_video_paths: set[Path] = set()
@@ -126,7 +131,7 @@ class LabelerState:
                     "index": index,
                     "path": path,
                     "video_id": video_id_for(path, self.test_root),
-                    "scene_type": self.scene_type_override or infer_scene_type(path, self.test_root),
+                    "scene_type": self.scene_type_for(path),
                     "media_url": f"/media/{index}",
                     "fps": read_fps(path),
                 }
@@ -139,18 +144,28 @@ class LabelerState:
         try:
             relative = self.video_root.resolve().relative_to(self.test_root.resolve())
             if relative.parts:
-                return relative.parts[0]
+                return normalize_scene_type_or_default(relative.parts[0])
         except ValueError:
             pass
         return DEFAULT_SCENE_TYPES[0]
+
+    def scene_type_for(self, path: Path) -> str:
+        raw_scene = self.scene_type_override or infer_scene_type(path, self.test_root)
+        return normalize_scene_type_or_default(raw_scene)
 
     def scene_options(self) -> dict[str, Any]:
         scenes = set(DEFAULT_SCENE_TYPES)
         if self.scene_type_override:
             scenes.add(self.scene_type_override)
         if self.test_root.exists():
-            scenes.update(path.name for path in self.test_root.iterdir() if path.is_dir())
-        default_scene = normalize_scene_type(self.default_import_scene())
+            for path in self.test_root.iterdir():
+                if not path.is_dir():
+                    continue
+                try:
+                    scenes.add(normalize_scene_type(path.name))
+                except ValueError:
+                    continue
+        default_scene = self.default_import_scene()
         scenes.add(default_scene)
         ordered = [scene for scene in DEFAULT_SCENE_TYPES if scene in scenes]
         ordered.extend(sorted(scenes.difference(ordered)))
@@ -178,6 +193,7 @@ class LabelerState:
             item["score_time"] = [shot["time_s"] for shot in normalized if shot.get("result") == "make"]
             item["shots"] = normalized
             item["notes"] = notes
+            item["completed"] = True
             write_labels(self.labels_path, labels)
         return item
 
@@ -334,6 +350,11 @@ def build_handler(state: LabelerState) -> type[BaseHTTPRequestHandler]:
             try:
                 fields, uploads = parse_multipart_upload(self)
                 saved = state.import_videos(uploads, fields.get("scene_type"))
+            except UploadTooLargeError as exc:
+                return self.send_json(
+                    {"ok": False, "error": str(exc)},
+                    status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
             except Exception as exc:  # noqa: BLE001 - local tool returns message to UI.
                 return self.send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             self.send_json({"ok": True, "saved": saved, "payload": videos_payload(state)})
@@ -372,6 +393,13 @@ def normalize_scene_type(raw: str) -> str:
     return value
 
 
+def normalize_scene_type_or_default(raw: str) -> str:
+    try:
+        return normalize_scene_type(raw)
+    except ValueError:
+        return DEFAULT_SCENE_TYPES[0]
+
+
 def sanitize_video_filename(raw: str) -> str:
     name = raw.replace("\\", "/").split("/")[-1].strip()
     suffix = Path(name).suffix.lower()
@@ -402,6 +430,11 @@ def parse_multipart_upload(handler: BaseHTTPRequestHandler) -> tuple[dict[str, s
     content_length = int(handler.headers.get("Content-Length", "0") or "0")
     if content_length <= 0:
         raise ValueError("empty upload request")
+    if content_length > MAX_IMPORT_BYTES:
+        max_mb = MAX_IMPORT_BYTES // (1024 * 1024)
+        raise UploadTooLargeError(
+            f"browser import is limited to {max_mb} MB; copy larger videos into test_videos instead"
+        )
     body = handler.rfile.read(content_length)
     header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
     message = BytesParser(policy=email_policy).parsebytes(header + body)
@@ -435,6 +468,7 @@ def videos_payload(state: LabelerState) -> dict[str, Any]:
     for video in state.videos:
         label = label_by_id.get(video["video_id"]) or {}
         shots = label.get("shots") if isinstance(label.get("shots"), list) else []
+        completed = label_is_completed(label)
         videos.append(
             {
                 "index": video["index"],
@@ -442,7 +476,8 @@ def videos_payload(state: LabelerState) -> dict[str, Any]:
                 "scene_type": video["scene_type"],
                 "media_url": video["media_url"],
                 "fps": video["fps"],
-                "labeled": bool(shots),
+                "labeled": completed,
+                "completed": completed,
                 "shots": shots,
                 "notes": label.get("notes") or "",
                 "true_shots": label.get("true_shots"),
@@ -457,6 +492,17 @@ def videos_payload(state: LabelerState) -> dict[str, Any]:
         "import": state.scene_options(),
         "videos": videos,
     }
+
+
+def label_is_completed(label: dict[str, Any]) -> bool:
+    if not label:
+        return False
+    if bool(label.get("completed")):
+        return True
+    return any(
+        key in label
+        for key in ("shots", "true_shots", "true_makes", "true_misses", "score_time")
+    )
 
 
 def send_file_with_range(handler: BaseHTTPRequestHandler, path: Path) -> None:

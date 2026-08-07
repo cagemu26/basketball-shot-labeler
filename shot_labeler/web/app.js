@@ -4,7 +4,10 @@ const state = {
   shots: [],
   notes: "",
   pendingRelease: null,
+  renderedTime: null,
 };
+
+const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
 
 const els = {
   datasetPath: document.getElementById("datasetPath"),
@@ -86,9 +89,9 @@ function renderImportScenes(importInfo) {
 }
 
 function renderVideoList() {
-  const labeled = state.videos.filter((v) => v.labeled).length;
+  const completed = state.videos.filter((v) => v.completed).length;
   els.videoCount.textContent = `${state.videos.length} videos`;
-  els.labeledCount.textContent = `${labeled} labeled`;
+  els.labeledCount.textContent = `${completed} completed`;
   els.videoList.innerHTML = "";
   state.videos.forEach((video, index) => {
     const button = document.createElement("button");
@@ -98,7 +101,7 @@ function renderVideoList() {
         <strong>${escapeHtml(video.video_id)}</strong>
         <small>${escapeHtml(video.scene_type)} · ${video.fps || 30} fps</small>
       </span>
-      <span class="badge ${video.labeled ? "done" : ""}">${video.shots?.length || 0}</span>
+      <span class="badge ${video.completed ? "done" : ""}" title="${video.completed ? "Completed" : "Not completed"}">${video.completed ? "✓ " : ""}${video.shots?.length || 0}</span>
     `;
     button.addEventListener("click", () => loadVideo(index));
     els.videoList.appendChild(button);
@@ -112,6 +115,7 @@ function loadVideo(index) {
   state.shots = cloneShots(video.shots || []);
   state.notes = video.notes || "";
   state.pendingRelease = null;
+  state.renderedTime = null;
   els.video.src = video.media_url;
   els.video.load();
   els.notes.value = state.notes;
@@ -195,7 +199,7 @@ function typeCell(shot, index) {
 }
 
 function addShot(result) {
-  const time = roundTime(els.video.currentTime || 0);
+  const time = annotationTime();
   const shot = {
     attempt: state.shots.length + 1,
     time_s: time,
@@ -213,7 +217,7 @@ function addShot(result) {
 }
 
 function markRelease() {
-  state.pendingRelease = roundTime(els.video.currentTime || 0);
+  state.pendingRelease = annotationTime();
   renderShots();
   setStatus(`Release marked at ${fmt(state.pendingRelease)}s.`);
 }
@@ -259,7 +263,8 @@ async function saveLabels(moveNext = false) {
   }
   video.shots = cloneShots(data.label.shots || []);
   video.notes = data.label.notes || "";
-  video.labeled = video.shots.length > 0;
+  video.completed = Boolean(data.label.completed);
+  video.labeled = video.completed;
   renderVideoList();
   setStatus("Saved.");
   if (moveNext) {
@@ -293,6 +298,11 @@ async function importVideos(event) {
   const files = Array.from(els.importFiles.files || []);
   if (files.length === 0) {
     setStatus("Choose at least one video file.");
+    return;
+  }
+  const oversized = files.find((file) => file.size > MAX_IMPORT_BYTES);
+  if (oversized) {
+    setStatus(`Browser import supports files up to 64 MB. Copy ${oversized.name} into test_videos instead.`);
     return;
   }
 
@@ -343,6 +353,12 @@ function frameStep(direction) {
   seekBy(direction / Math.max(fps, 1));
 }
 
+function annotationTime() {
+  const rendered = Number(state.renderedTime);
+  const fallback = Number(els.video.currentTime || 0);
+  return roundTime(Number.isFinite(rendered) ? rendered : fallback);
+}
+
 function roundTime(value) {
   return Math.round(Number(value) * 100) / 100;
 }
@@ -361,6 +377,16 @@ function escapeHtml(value) {
 }
 
 function bindControls() {
+  els.video.addEventListener("seeked", () => {
+    state.renderedTime = Number(els.video.currentTime || 0);
+  });
+  if (typeof els.video.requestVideoFrameCallback === "function") {
+    const trackRenderedFrame = (_now, metadata) => {
+      state.renderedTime = Number(metadata.mediaTime);
+      els.video.requestVideoFrameCallback(trackRenderedFrame);
+    };
+    els.video.requestVideoFrameCallback(trackRenderedFrame);
+  }
   document.getElementById("back5Button").addEventListener("click", () => seekBy(-5));
   document.getElementById("back1Button").addEventListener("click", () => seekBy(-1));
   document.getElementById("prevFrameButton").addEventListener("click", () => frameStep(-1));

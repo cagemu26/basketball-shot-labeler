@@ -19,14 +19,13 @@ Example:
 
 The full collection loop can be done in the web UI:
 
-1. Select the scene folder.
-2. Import local video files.
-3. Open an imported video from the left list.
-4. Mark each shot result.
-5. Save the video label.
-6. Export `labels.json`.
+1. Copy large recordings into `test_videos/<scene_type>/`. Browser import is only for files up to 64 MB.
+2. Open a video from the left list.
+3. Mark each shot result.
+4. Save the video label. This also marks a zero-shot video as completed.
+5. Export `labels.json`.
 
-Imported files are copied into `test_videos/<scene_type>/`.
+Small imported files are copied into `test_videos/<scene_type>/`.
 
 ## Optional Release Time
 

@@ -95,11 +95,15 @@ test_videos/
 
 For the first dataset, fixed half-court videos are enough. Keep user/private videos out of Git.
 
-You can also import videos from the web UI. The browser import button copies files into:
+You can import **small files (up to 64 MB)** from the web UI. The browser import
+button copies them into:
 
 ```text
 test_videos/<scene_type>/
 ```
+
+For large game recordings, copy files into that folder before launching the
+tool. The import size limit prevents a browser upload from exhausting memory.
 
 ## Run The Web Labeler
 
@@ -133,16 +137,14 @@ The UI runs locally and writes directly to `labels.json`.
 
 ## Web UI Workflow
 
-1. Choose a `Scene` in the left panel.
-2. Select one or more local files in `Videos`.
-3. Click `Import Videos`; files are copied into `test_videos/<scene>/`.
-4. Pick a video from the left list.
-5. Play or scrub to the moment where the shot result is clear.
-6. Optionally press `s` to mark release time.
-7. Press `m` for make or `x` for miss.
-8. For a miss, choose the row-level `Type` in the `Shots` table.
-9. Press `Save` or `Save Next`.
-10. Press `Export JSON` to save the current video and download the full `labels.json`.
+1. Copy large recordings into `test_videos/<scene_type>/`, or import small files.
+2. Pick a video from the left list.
+3. Play or scrub to the moment where the shot result is clear.
+4. Optionally press `s` to mark release time.
+5. Press `m` for make or `x` for miss.
+6. For a miss, choose the row-level `Type` in the `Shots` table.
+7. Press `Save` or `Save Next`. A green `✓ 0` means a zero-shot video is completed.
+8. Press `Export JSON` to save the current video and download the full `labels.json`.
 
 ## Label Studio Workflow
 
